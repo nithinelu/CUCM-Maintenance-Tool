@@ -1,0 +1,203 @@
+10:25:20  [10.60.51.10] connecting SSH as admin ...
+10:25:39  [10.60.51.10] CLI ready
+10:25:51  Discovered 1 node(s): jlrcucmpub (10.60.51.10)
+10:26:26  [10.60.51.10] connecting SSH as admin ...
+10:26:39  [10.60.51.10] CLI ready
+10:26:40  Built-in SFTP server is not running - starting it
+10:26:40  SFTP server listening on 0.0.0.0:22, root D:\Tools\CUCM-Maintenance-Tool\sftp_root (host key MD5 15:ec:3f:0b:4e:22:ef:7b:45:aa:68:c4:69:c6:03:d2)
+10:26:44  [10.60.51.10] auto-answer 'SFTP password' -> ******
+10:29:40  DRS backup: 10.60.51.10: timed out after 180 s waiting for 'utils disaster_recovery device add network MAINT_TOOL_SFTP /backup 192.168.100.16 cucmsftp 3'
+Last output:
+utils disaster_recovery device add network MAINT_TOOL_SFTP /backup 192.168.100.16 cucmsftp 3
+Please enter password to connect to network server 192.168.100.16:**************
+
+10:30:04  [10.60.51.10] connecting SSH as admin ...
+10:30:17  [10.60.51.10] CLI ready
+10:30:21  [10.60.51.10] auto-answer 'SFTP password' -> ******
+10:32:08  Firewall rule for TCP 22: requested (approve the UAC prompt)
+10:32:52  SFTP server stopped
+10:32:56  SFTP server listening on 0.0.0.0:22, root D:\Tools\CUCM-Maintenance-Tool\sftp_root (host key MD5 15:ec:3f:0b:4e:22:ef:7b:45:aa:68:c4:69:c6:03:d2)
+10:33:18  DRS backup: 10.60.51.10: timed out after 180 s waiting for 'utils disaster_recovery device add network MAINT_TOOL_SFTP /backup 192.168.100.16 cucmsftp 3'
+Last output:
+utils disaster_recovery device add network MAINT_TOOL_SFTP /backup 192.168.100.16 cucmsftp 3
+Please enter password to connect to network server 192.168.100.16:**************
+
+10:34:42  [10.60.51.10] connecting SSH as admin ...
+10:34:54  [10.60.51.10] CLI ready
+10:36:05  SFTP server listening on 0.0.0.0:2023, root C:\Users\70395\AppData\Local\Temp\tmpig9rm4ww (host key MD5 15:ec:3f:0b:4e:22:ef:7b:45:aa:68:c4:69:c6:03:d2)
+14:10:58  SFTP server stopped
+14:11:16  SFTP server listening on 0.0.0.0:22, root D:\Tools\CUCM-Maintenance-Tool\sftp_root (host key MD5 15:ec:3f:0b:4e:22:ef:7b:45:aa:68:c4:69:c6:03:d2)
+14:11:46  [10.60.51.10] connecting SSH as admin ...
+14:11:59  [10.60.51.10] CLI ready
+14:12:09  SFTP IP set to 10.11.54.76 (route to 10.60.51.10)
+14:12:12  Discovered 1 node(s): jlrcucmpub (10.60.51.10)
+14:12:42  [10.60.51.10] connecting SSH as admin ...
+14:12:54  [10.60.51.10] CLI ready
+14:12:58  [10.60.51.10] auto-answer 'SFTP password' -> ******
+14:12:59  10.60.51.10: connected
+14:12:59  10.60.51.10: login OK as 'cucmsftp'
+14:12:59  10.60.51.10: connected
+14:12:59  10.60.51.10: login OK as 'cucmsftp'
+14:12:59  10.60.51.10: connected
+14:13:00  10.60.51.10: disconnected
+14:13:00  10.60.51.10: login OK as 'cucmsftp'
+14:13:00  10.60.51.10: disconnected
+14:13:00  10.60.51.10: connected
+14:13:00  10.60.51.10: login OK as 'cucmsftp'
+14:13:00  10.60.51.10: disconnected
+14:13:00  10.60.51.10: connected
+14:13:00  10.60.51.10: login OK as 'cucmsftp'
+14:13:00  10.60.51.10: deleted /backup/jlrcucmpub_dUmmI_Drf
+14:13:01  10.60.51.10: disconnected
+14:13:01  10.60.51.10: disconnected
+14:13:01  DRS device MAINT_TOOL_SFTP -> sftp://cucmsftp@10.11.54.76/backup
+Please enter password to connect to network server 10.11.54.76:**************
+drfCliMsg: Backup Device has been saved successfully.
+14:13:04  10.60.51.10: connected
+14:13:04  10.60.51.10: login OK as 'cucmsftp'
+14:13:04  10.60.51.10: disconnected
+14:13:06  10.60.51.10: connected
+14:13:07  10.60.51.10: login OK as 'cucmsftp'
+14:13:07  10.60.51.10: connected
+14:13:07  10.60.51.10: login OK as 'cucmsftp'
+14:13:07  10.60.51.10: connected
+14:13:07  10.60.51.10: disconnected
+14:13:07  10.60.51.10: login OK as 'cucmsftp'
+14:13:07  10.60.51.10: connected
+14:13:07  10.60.51.10: disconnected
+14:13:07  10.60.51.10: login OK as 'cucmsftp'
+14:13:08  10.60.51.10: connected
+14:13:08  10.60.51.10: disconnected
+14:13:08  10.60.51.10: login OK as 'cucmsftp'
+14:13:08  10.60.51.10: deleted /backup/jlrcucmpub_dUmmI_Drf
+14:13:08  10.60.51.10: disconnected
+14:13:08  10.60.51.10: disconnected
+14:13:08  Backup started on 10.60.51.10: drfCliMsg: Backup initiated successfully. Please run 'utils disaster_recovery status backup' command to see the status
+WARNING: 
+The DRS Backup archive encryption depends on the current security password (Provided at the time of install). During a restore, you could be prompted to enter this security password if this password has been changed.
+14:13:09  10.60.51.10: connected
+14:13:10  10.60.51.10: login OK as 'cucmsftp'
+14:13:15  10.60.51.10: connected
+14:13:15  10.60.51.10: login OK as 'cucmsftp'
+14:13:15  10.60.51.10: disconnected
+14:14:15  10.60.51.10: connected
+14:14:15  10.60.51.10: login OK as 'cucmsftp'
+14:14:16  10.60.51.10: disconnected
+14:15:37  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_CDR_CAR_CAR.tar (38.2 MB, 266.4 KB/s)
+14:15:37  10.60.51.10: disconnected
+14:15:37  10.60.51.10: connected
+14:15:37  10.60.51.10: login OK as 'cucmsftp'
+14:15:38  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_CDPAGT.tar (20.1 KB, 50.9 KB/s)
+14:15:38  10.60.51.10: disconnected
+14:15:38  10.60.51.10: connected
+14:15:39  10.60.51.10: login OK as 'cucmsftp'
+14:15:39  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_SYSLOGAGT.tar (10.1 KB, 33.7 KB/s)
+14:15:39  10.60.51.10: disconnected
+14:15:40  10.60.51.10: connected
+14:15:41  10.60.51.10: login OK as 'cucmsftp'
+14:15:42  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_PLATFORM.tar (1.8 MB, 1.8 MB/s)
+14:15:42  10.60.51.10: connected
+14:15:42  10.60.51.10: login OK as 'cucmsftp'
+14:15:42  10.60.51.10: disconnected
+14:15:42  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_CLM.tar (10.1 KB, 30.2 KB/s)
+14:15:42  10.60.51.10: disconnected
+14:15:43  10.60.51.10: connected
+14:15:43  10.60.51.10: login OK as 'cucmsftp'
+14:15:47  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_CCMPREFS.tar (12.4 MB, 3.3 MB/s)
+14:15:47  10.60.51.10: disconnected
+14:15:47  10.60.51.10: connected
+14:15:47  10.60.51.10: login OK as 'cucmsftp'
+14:15:48  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_TCT.tar (10.1 KB, 32.8 KB/s)
+14:15:48  10.60.51.10: disconnected
+14:15:48  10.60.51.10: connected
+14:15:48  10.60.51.10: login OK as 'cucmsftp'
+14:15:53  10.60.51.10: connected
+14:15:53  10.60.51.10: login OK as 'cucmsftp'
+14:15:54  10.60.51.10: disconnected
+14:16:29  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_CCMDB.tar (46.3 MB, 1.2 MB/s)
+14:16:29  10.60.51.10: disconnected
+14:16:29  10.60.51.10: connected
+14:16:29  10.60.51.10: login OK as 'cucmsftp'
+14:16:30  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_ANN.tar (10.0 KB, 35.5 KB/s)
+14:16:30  10.60.51.10: disconnected
+14:16:30  10.60.51.10: connected
+14:16:30  10.60.51.10: login OK as 'cucmsftp'
+14:16:34  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_MOH.tar (36.1 MB, 8.9 MB/s)
+14:16:34  10.60.51.10: connected
+14:16:34  10.60.51.10: login OK as 'cucmsftp'
+14:16:34  10.60.51.10: disconnected
+14:16:36  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_BAT.tar (5.2 MB, 3.2 MB/s)
+14:16:36  10.60.51.10: disconnected
+14:16:36  10.60.51.10: connected
+14:16:37  10.60.51.10: login OK as 'cucmsftp'
+14:16:38  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_REPORTER.tar (8.9 MB, 7.9 MB/s)
+14:16:38  10.60.51.10: disconnected
+14:16:38  10.60.51.10: connected
+14:16:38  10.60.51.10: login OK as 'cucmsftp'
+14:16:43  10.60.51.10: connected
+14:16:43  10.60.51.10: login OK as 'cucmsftp'
+14:16:44  10.60.51.10: disconnected
+14:17:43  10.60.51.10: connected
+14:17:44  10.60.51.10: login OK as 'cucmsftp'
+14:17:44  10.60.51.10: disconnected
+14:18:44  10.60.51.10: connected
+14:18:44  10.60.51.10: login OK as 'cucmsftp'
+14:18:44  10.60.51.10: disconnected
+14:19:26  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_TFTP.tar (1.6 GB, 9.7 MB/s)
+14:19:26  10.60.51.10: connected
+14:19:26  10.60.51.10: login OK as 'cucmsftp'
+14:19:26  10.60.51.10: disconnected
+14:19:27  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_DNALIASLOOKUP.tar (20.0 KB, 45.1 KB/s)
+14:19:27  10.60.51.10: connected
+14:19:27  10.60.51.10: login OK as 'cucmsftp'
+14:19:27  10.60.51.10: disconnected
+14:19:27  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_DNALIASSYNC.tar (10.0 KB, 33.1 KB/s)
+14:19:27  10.60.51.10: disconnected
+14:19:28  10.60.51.10: connected
+14:19:28  10.60.51.10: login OK as 'cucmsftp'
+14:19:28  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_CEF.tar (60.1 KB, 104.4 KB/s)
+14:19:29  10.60.51.10: disconnected
+14:19:42  10.60.51.10: connected
+14:19:43  10.60.51.10: login OK as 'cucmsftp'
+14:19:43  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_UCM_SLM.tar (91.1 KB, 218.0 KB/s)
+14:19:44  10.60.51.10: disconnected
+14:19:45  Backup finished: Backup operation in progress for server [JLRCUCMPUB], please wait...
+Status: Backup operation in progress for server [JLRCUCMPUB], please wait...
+Tar Filename: 2026-10-27-14-11-32.tar
+Storage Location: NETWORK
+Operation: backup
+Percentage Complete: 100
+CDR_CAR   JLRCUCMPUB   CAR   SUCCESS   Tue Oct 27 14:11:32 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_cdr_car_car.log   
+UCM   JLRCUCMPUB   CDPAGT   SUCCESS   Tue Oct 27 14:14:01 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_cdpagt.log   
+UCM   JLRCUCMPUB   SYSLOGAGT   SUCCESS   Tue Oct 27 14:14:02 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_syslogagt.log   
+UCM   JLRCUCMPUB   PLATFORM   SUCCESS   Tue Oct 27 14:14:03 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_platform.log   
+UCM   JLRCUCMPUB   CLM   SUCCESS   Tue Oct 27 14:14:06 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_clm.log   
+UCM   JLRCUCMPUB   CCMPREFS   SUCCESS   Tue Oct 27 14:14:06 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_ccmprefs.log   
+UCM   JLRCUCMPUB   TCT   SUCCESS   Tue Oct 27 14:14:11 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_tct.log   
+UCM   JLRCUCMPUB   CCMDB   SUCCESS   Tue Oct 27 14:14:12 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_ccmdb.log   
+UCM   JLRCUCMPUB   ANN   SUCCESS   Tue Oct 27 14:14:53 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_ann.log   
+UCM   JLRCUCMPUB   MOH   SUCCESS   Tue Oct 27 14:14:54 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_moh.log   
+UCM   JLRCUCMPUB   BAT   SUCCESS   Tue Oct 27 14:14:58 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_bat.log   
+UCM   JLRCUCMPUB   REPORTER   SUCCESS   Tue Oct 27 14:15:00 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_reporter.log   
+UCM   JLRCUCMPUB   TFTP   SUCCESS   Tue Oct 27 14:15:02 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_tftp.log   
+UCM   JLRCUCMPUB   DNALIASLOOKUP   SUCCESS   Tue Oct 27 14:17:50 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_dnaliaslookup.log   
+UCM   JLRCUCMPUB   DNALIASSYNC   SUCCESS   Tue Oct 27 14:17:51 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_dnaliassync.log   
+UCM   JLRCUCMPUB   CEF   SUCCESS   Tue Oct 27 14:17:52 GST 2026   activelog/platform/drf/log/2026-10-27-14-11-32_b_jlrcucmpub_ucm_cef.log   
+UCM   JLRCUCMPUB   SLM   Active   Tue Oct 27 14:17:53 GST 2026
+14:20:37  10.60.51.10: connected
+14:20:37  10.60.51.10: login OK as 'cucmsftp'
+14:20:37  10.60.51.10: connected
+14:20:37  10.60.51.10: login OK as 'cucmsftp'
+14:20:37  10.60.51.10: disconnected
+14:20:37  10.60.51.10: received /backup/2026-10-27-14-11-32_JLRCUCMPUB_drfComponent.xml (27.2 KB, 480.2 KB/s)
+14:20:38  10.60.51.10: disconnected
+14:20:38  10.60.51.10: connected
+14:20:38  10.60.51.10: login OK as 'cucmsftp'
+14:20:38  10.60.51.10: connected
+14:20:38  10.60.51.10: login OK as 'cucmsftp'
+14:20:38  10.60.51.10: disconnected
+14:20:39  10.60.51.10: disconnected
+14:20:42  [10.60.51.10] connecting SSH as admin ...
+14:20:56  [10.60.51.10] CLI ready
+14:22:28  Health report saved: D:\Tools\CUCM-Maintenance-Tool\reports\health-20261027-142042.txt
+14:33:53  SFTP server stopped
