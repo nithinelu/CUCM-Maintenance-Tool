@@ -18,7 +18,7 @@ One Windows app for CUCM / IM&P maintenance that comes with its own SFTP server,
 
 Notes
 * CUCM sees the SFTP root as `/`. Use `/backup` for DRS and `/upgrade` for ISO/COP files.
-* Port 22 is the default. If Windows OpenSSH Server is running on this PC, it already uses 22, so stop it or use another port. Older DRS releases cannot use a different port.
+* Port 22 is the default. If Windows OpenSSH Server is running on this PC, it already uses 22, so stop it or use another port. 
 * DRS keeps the SFTP password in its backup device. If you change the password, run **Create / update backup device** again.
 * Passwords are saved only when you tick *Remember passwords*. They are encrypted with Windows DPAPI for the current user.
 * `tests/test_e2e.py` runs the whole flow against `tests/fake_cucm.py`, a simulated CLI.
