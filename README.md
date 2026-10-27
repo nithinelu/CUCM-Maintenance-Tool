@@ -22,3 +22,6 @@ Notes
 * DRS keeps the SFTP password in its backup device. If you change the password, run **Create / update backup device** again.
 * Passwords are saved only when you tick *Remember passwords*. They are encrypted with Windows DPAPI for the current user.
 * `tests/test_e2e.py` runs the whole flow against `tests/fake_cucm.py`, a simulated CLI.
+
+## License
+MIT - see [LICENSE](LICENSE).
