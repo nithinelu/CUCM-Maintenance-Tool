@@ -33,9 +33,15 @@ class _Auth(paramiko.ServerInterface):
         return True
 
 
+CUCM_CLUSTER = ("10.0.0.1 cucmpub.lab.local cucmpub Publisher callmanager DBPub authenticated\n"
+                "10.0.0.2 cucmsub1.lab.local cucmsub1 Subscriber callmanager DBSub authenticated\n"
+                "10.0.0.3 imp1.lab.local imp1 Publisher cups DBPub authenticated\n")
+
+
 class CLI:
-    def __init__(self, chan, ip):
+    def __init__(self, chan, ip, product="cucm", cluster=CUCM_CLUSTER):
         self.ch, self.ip = chan, ip
+        self.product, self.cluster = product, cluster
         self.drs = {}
 
     def w(self, s):
@@ -84,10 +90,20 @@ class CLI:
         if cmd == "set cli pagination off":
             self.w("Automatic Pagination : Off.\n")
         elif cmd == "show network cluster":
-            self.w("10.0.0.1 cucmpub.lab.local cucmpub Publisher callmanager DBPub authenticated\n"
-                   "10.0.0.2 cucmsub1.lab.local cucmsub1 Subscriber callmanager DBSub authenticated\n"
-                   "10.0.0.3 imp1.lab.local imp1 Publisher cups DBPub authenticated\n\n"
-                   "Server Table (processnode) Entries\n----\n")
+            self.w(self.cluster + "\nServer Table (processnode) Entries\n----\n")
+        elif cmd.startswith("show cuc") and self.product != "cuc":
+            self.w(f"Executed command unsuccessfully\nNo valid command entered: {cmd}\n")
+        elif cmd == "show cuc version":
+            self.w("Active version: 14.0.1.13900-79\n")
+        elif cmd == "show cuc cluster status":
+            self.w("Server Name  Member ID  Server State  Internal State  Reason\n"
+                   "cucpub       0          Primary       Pri Active      Normal\n")
+        elif cmd == "show cuc dbserver disk":
+            self.w("Dbspaces: unity_dbs 12 % used\n")
+        elif cmd == "show cuc sysinfo":
+            self.w("Product: Cisco Unity Connection\nUsers: 2\n")
+        elif cmd.startswith("utils disaster_recovery show_registration"):
+            self.w("CUC : cuc, cucmbe\n" if self.product == "cuc" else "UCM : ccmdb, tftp\nCDR_CAR : car\n")
         elif cmd == "show version active":
             self.w("Active Master Version: 14.0.1.13900-155\nActive Version Installed Software Options:\n"
                    "ciscocm.ucm_ldap.cop.sgn\n")
@@ -171,10 +187,10 @@ class CLI:
             self.w(f"Executed command unsuccessfully\nNo valid command entered: {cmd}\n")
 
 
-def serve(port, ready):
+def serve(port, ready, bind="127.0.0.1", product="cucm", cluster=CUCM_CLUSTER):
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("127.0.0.1", port))
+    sock.bind((bind, port))
     sock.listen(5)
     ready.set()
     while True:
@@ -186,7 +202,7 @@ def serve(port, ready):
             t.start_server(server=_Auth())
             ch = t.accept(30)
             try:
-                CLI(ch, "10.0.0.1").run()
+                CLI(ch, bind, product, cluster).run()
             except (EOFError, OSError):
                 pass
             finally:
@@ -194,7 +210,53 @@ def serve(port, ready):
         threading.Thread(target=handle, daemon=True).start()
 
 
-def start(port=2222):
+def start(port=2222, bind="127.0.0.1", product="cucm", cluster=CUCM_CLUSTER):
     ready = threading.Event()
-    threading.Thread(target=serve, args=(port, ready), daemon=True).start()
+    threading.Thread(target=serve, args=(port, ready, bind, product, cluster), daemon=True).start()
     ready.wait()
+
+
+# --------------------------------------------------------------------------
+# Fake CUPI (Unity Connection REST, http instead of https)
+# --------------------------------------------------------------------------
+CUPI_USERS = [{"Alias": f"user{i}", "FirstName": "Test", "LastName": f"User{i}", "DtmfAccessId": str(5000 + i),
+               "ObjectId": f"oid-{i}", "URI": f"/vmrest/users/oid-{i}"} for i in range(7)]
+
+
+def start_cupi(port=8099):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import urlparse, parse_qs
+    import base64
+    import json
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, obj):
+            body = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            if self.headers.get("Authorization") != "Basic " + base64.b64encode(b"cupiadmin:cupipw").decode():
+                return self._send(401, {})
+            u = urlparse(self.path)
+            q = parse_qs(u.query)
+            size, page = int(q.get("rowsPerPage", ["50"])[0]), int(q.get("pageNumber", ["1"])[0])
+            if u.path == "/vmrest/users":
+                chunk = CUPI_USERS[(page - 1) * size:page * size]
+                return self._send(200, {"@total": str(len(CUPI_USERS)),
+                                        "User": chunk[0] if len(chunk) == 1 else chunk})
+            if u.path == "/vmrest/coses":
+                return self._send(200, {"@total": "1", "Cos": {"DisplayName": "Voice Mail User COS"}})
+            if u.path == "/vmrest/version/product":
+                return self._send(200, {"version": "14.0.1.13900-79"})
+            return self._send(404, {})
+
+    srv = ThreadingHTTPServer(("127.0.0.1", port), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv

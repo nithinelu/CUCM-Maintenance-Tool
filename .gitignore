@@ -1,0 +1,17 @@
+# Local settings and secrets - never commit
+config.json
+data/
+
+# Runtime output
+logs/
+reports/
+__pycache__/
+*.pyc
+
+# SFTP server content (backups, upgrade ISOs, exports) - keep only the empty-folder placeholders
+sftp_root/**
+!sftp_root/*/
+!sftp_root/*/New Text Document.txt
+
+# Icon preview image (made by tools/make_icon.py)
+tools/icon_preview_256.png

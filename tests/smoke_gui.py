@@ -1,10 +1,13 @@
 import os, sys, ctypes, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import maint_app
+import maint_app, tempfile
+_t = tempfile.mkdtemp()
+maint_app.CONFIG = os.path.join(_t, 'config.json'); maint_app.LOG_DIR = os.path.join(_t, 'logs'); maint_app.REPORT_DIR = os.path.join(_t, 'reports')
 from PIL import Image
 app = maint_app.App()
 app.nodes = [{"host": "10.0.0.1", "hostname": "cucmpub", "role": "Publisher", "type": "CUCM", "active": "14.0.1.13900-155", "inactive": "12.5.1.16900-48", "cops": ["ciscocm.ucm_ldap.cop.sgn"]},
-             {"host": "10.0.0.2", "hostname": "cucmsub1", "role": "Subscriber", "type": "CUCM"}]
+             {"host": "10.0.0.2", "hostname": "cucmsub1", "role": "Subscriber", "type": "CUCM"},
+             {"host": "10.0.1.1", "hostname": "cucpub", "role": "Publisher", "type": "Unity", "cluster": "cuc", "active": "14.0.1.13900-79"}]
 app._nodes_changed()
 out = sys.argv[1]
 def grab(i):

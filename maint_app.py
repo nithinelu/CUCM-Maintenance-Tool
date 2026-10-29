@@ -1,4 +1,4 @@
-"""CUCM Maintenance Tool - DRS backup, upgrades / COP installs and data export,
+"""Collab Ops Manager - CUCM, IM&P and Unity Connection: DRS backup, upgrades / COP installs and data export,
 with its own built-in SFTP server (no separate SFTP application needed)."""
 
 import json
@@ -15,12 +15,13 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
+import cuc_ops
 import cucm_ops as ops
 from cucm_cli import CUCMShell, CLIError, run_on_nodes
 from secrets_store import protect, unprotect
 from sftp_server import SFTPServer, local_ipv4_addresses, source_ip_for
 
-APP = "CUCM Maintenance Tool"
+APP = "Collab Ops Manager"
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(HERE, "config.json")
 LOG_DIR = os.path.join(HERE, "logs")
@@ -111,6 +112,10 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP)
+        try:
+            self.iconbitmap(default=os.path.join(HERE, "app.ico"))     # title bar, taskbar, dialogs
+        except tk.TclError:
+            pass
         self.geometry("1180x860")
         self.minsize(980, 700)
         self.cfg = self._load_cfg()
@@ -151,9 +156,11 @@ class App(tk.Tk):
             "sftp_password": protect(self.v_spw.get()),
             "sftp_autostart": bool(self.v_autostart.get()),
             "sftp_restrict": bool(self.v_restrict.get()),
-            "drs_device": self.v_dev.get().strip(), "drs_keep": self.v_keep.get().strip(),
-            "drs_features": self.v_feat.get().strip(), "drs_dir": self.v_bkdir.get().strip(),
         })
+        self._bk_store()
+        b = self.bk_settings["cucm"]
+        c.update({"drs_device": b["device"], "drs_keep": b["keep"], "drs_features": b["features"],
+                  "drs_dir": b["dir"], "drs_cuc": self.bk_settings["cuc"]})
         if self.v_savepw.get():
             c["os_password"] = protect(self.v_ospw.get())
             c["axl_password"] = protect(self.v_axlpw.get())
@@ -161,6 +168,11 @@ class App(tk.Tk):
             c.pop("os_password", None)
             c.pop("axl_password", None)
         c["save_passwords"] = bool(self.v_savepw.get())
+        cu = {"publisher": self.v_cucpub.get().strip(), "os_user": self.v_cucosuser.get().strip(),
+              "cupi_user": self.v_cupiuser.get().strip()}
+        if self.v_savepw.get():
+            cu.update(os_password=protect(self.v_cucospw.get()), cupi_password=protect(self.v_cupipw.get()))
+        c["cuc"] = cu
         try:
             with open(CONFIG, "w", encoding="utf-8") as f:
                 json.dump(c, f, indent=2)
@@ -247,30 +259,55 @@ class App(tk.Tk):
         self.log("Stop requested")
 
     # -- credentials / helpers ----------------------------------------------
-    def os_creds(self):
-        u, p = self.v_osuser.get().strip(), self.v_ospw.get()
+    def node(self, host):
+        return next((n for n in self.nodes if n["host"] == host), None)
+
+    def cluster_of(self, host):
+        n = self.node(host)
+        if n:
+            return n.get("cluster", "cuc" if n.get("type") == "Unity" else "cucm")
+        return "cuc" if host and host == self.v_cucpub.get().strip() else "cucm"
+
+    def os_creds(self, cluster="cucm"):
+        if cluster == "cuc" and self.v_cucosuser.get().strip():
+            u, p, where = self.v_cucosuser.get().strip(), self.v_cucospw.get(), "Unity Connection"
+        else:
+            u, p, where = self.v_osuser.get().strip(), self.v_ospw.get(), "CUCM"
         if not u or not p:
-            raise CLIError("Enter the OS (platform) administrator user and password on the Cluster tab.")
+            raise CLIError(f"Enter the {where} OS (platform) administrator user and password on the Cluster tab.")
         return u, p
 
-    def shell(self, host):
-        u, p = self.os_creds()
+    def shell(self, host, cluster=None):
+        u, p = self.os_creds(cluster or self.cluster_of(host))
         return CUCMShell(host, u, p, log=self.log)
 
-    def publisher(self):
+    def publisher(self, cluster="cucm"):
         for n in self.nodes:
-            if n.get("role") == "Publisher" and n.get("type") == "CUCM":
+            if n.get("role") == "Publisher" and n.get("type") != "IM&P" and \
+                    self.cluster_of(n["host"]) == cluster:
                 return n["host"]
-        pub = self.v_pub.get().strip()
+        pub = (self.v_cucpub if cluster == "cuc" else self.v_pub).get().strip()
         if not pub:
-            raise CLIError("Enter the CUCM publisher address on the Cluster tab.")
+            name = "Unity Connection" if cluster == "cuc" else "CUCM"
+            raise CLIError(f"Enter the {name} publisher address on the Cluster tab.")
         return pub
+
+    def publishers(self):
+        """{cluster: publisher} for every configured cluster."""
+        out = {}
+        for cl in ("cucm", "cuc"):
+            try:
+                out[cl] = self.publisher(cl)
+            except CLIError:
+                pass
+        return out
 
     def sftp_params(self, need_running=True):
         ip = self.v_ip.get().strip()
         if not ip:
             raise CLIError("Set the 'IP address CUCM uses to reach this PC' on the SFTP Server tab.")
-        route_ip = source_ip_for(self.v_pub.get().strip()) if self.v_pub.get().strip() else ""
+        ref = self.v_pub.get().strip() or self.v_cucpub.get().strip()
+        route_ip = source_ip_for(ref) if ref else ""
         if ip not in local_ipv4_addresses() and ip != route_ip:
             # Typical after moving between networks (Wi-Fi / VPN / office LAN).
             if not route_ip:
@@ -303,8 +340,8 @@ class App(tk.Tk):
             ip = host
         if self.server.seen.get(ip, 0) >= since:
             return ""
-        return (f"\n\nCUCM ({ip}) never connected to the built-in SFTP server at "
-                f"{self.v_ip.get()}:{self.v_port.get()}. Check that this IP is reachable from CUCM "
+        return (f"\n\nThe node ({ip}) never connected to the built-in SFTP server at "
+                f"{self.v_ip.get()}:{self.v_port.get()}. Check that this IP is reachable from the node "
                 "(no NAT / VPN in between), the Windows Firewall rule, and that nothing else "
                 "(e.g. OpenSSH Server) owns the port.")
 
@@ -344,9 +381,13 @@ class App(tk.Tk):
     def _build(self):
         head = tk.Frame(self, bg=NAVY, height=56)
         head.pack(fill="x")
-        tk.Label(head, text="☎", font=("Segoe UI Symbol", 18), fg="white", bg=NAVY).pack(side="left", padx=(16, 4))
+        try:
+            self._logo = tk.PhotoImage(file=os.path.join(HERE, "app.png"))
+            tk.Label(head, image=self._logo, bg=NAVY).pack(side="left", padx=(14, 8))
+        except tk.TclError:
+            tk.Label(head, text="☎", font=("Segoe UI Symbol", 18), fg="white", bg=NAVY).pack(side="left", padx=(16, 4))
         tk.Label(head, text=APP, font=("Segoe UI", 15, "bold"), fg="white", bg=NAVY).pack(side="left")
-        tk.Label(head, text="  Backup · Upgrade · COP · Export  —  built-in SFTP server",
+        tk.Label(head, text="  CUCM · IM&P · Unity Connection  —  Backup · Upgrade · COP · Export · built-in SFTP",
                  font=("Segoe UI", 10), fg="#C9D3E6", bg=NAVY).pack(side="left", pady=14)
         self.sftp_pill = tk.Label(head, text="  ● SFTP stopped  ", font=("Segoe UI", 9, "bold"),
                                   fg="white", bg="#6B7280")
@@ -413,27 +454,40 @@ class App(tk.Tk):
         self.v_axluser = tk.StringVar(value=c.get("axl_user", ""))
         self.v_axlpw = tk.StringVar(value=unprotect(c.get("axl_password", "")))
         self.v_savepw = tk.BooleanVar(value=c.get("save_passwords", False))
+        cu = c.get("cuc", {})
+        self.v_cucpub = tk.StringVar(value=cu.get("publisher", ""))
+        self.v_cucosuser = tk.StringVar(value=cu.get("os_user", ""))
+        self.v_cucospw = tk.StringVar(value=unprotect(cu.get("os_password", "")))
+        self.v_cupiuser = tk.StringVar(value=cu.get("cupi_user", ""))
+        self.v_cupipw = tk.StringVar(value=unprotect(cu.get("cupi_password", "")))
 
         top = ttk.Frame(f)
         top.pack(fill="x")
-        lf = ttk.LabelFrame(top, text="Platform (OS) administrator - SSH CLI", padding=10)
+        lf = ttk.LabelFrame(top, text="CUCM cluster", padding=10)
         lf.pack(side="left", fill="y")
-        self._row(lf, 0, "Publisher IP / FQDN", self.v_pub, width=28)
-        self._row(lf, 1, "OS admin user", self.v_osuser, width=28)
-        self._row(lf, 2, "OS admin password", self.v_ospw, show="•", width=28)
-        ttk.Checkbutton(lf, text="Remember passwords (encrypted for this Windows user)",
-                        variable=self.v_savepw).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self._row(lf, 0, "Publisher IP / FQDN", self.v_pub, width=24)
+        self._row(lf, 1, "OS admin user", self.v_osuser, width=24)
+        self._row(lf, 2, "OS admin password", self.v_ospw, show="•", width=24)
+        self._row(lf, 3, "AXL user", self.v_axluser, width=24)
+        self._row(lf, 4, "AXL password", self.v_axlpw, show="•", width=24)
+        ttk.Label(lf, text="AXL is only for the Excel inventory ('Standard AXL API Access').",
+                  style="Muted.TLabel").grid(row=5, column=0, columnspan=2, sticky="w")
 
-        af = ttk.LabelFrame(top, text="Application user - AXL (only for Excel inventory export)", padding=10)
-        af.pack(side="left", fill="y", padx=10)
-        self._row(af, 0, "AXL user", self.v_axluser, width=24)
-        self._row(af, 1, "AXL password", self.v_axlpw, show="•", width=24)
-        ttk.Label(af, text="Needs the 'Standard AXL API Access' role.", style="Muted.TLabel").grid(
-            row=2, column=0, columnspan=2, sticky="w")
+        uf = ttk.LabelFrame(top, text="Unity Connection cluster (optional)", padding=10)
+        uf.pack(side="left", fill="y", padx=10)
+        self._row(uf, 0, "Publisher IP / FQDN", self.v_cucpub, width=24)
+        self._row(uf, 1, "OS admin user", self.v_cucosuser, width=24)
+        self._row(uf, 2, "OS admin password", self.v_cucospw, show="•", width=24)
+        self._row(uf, 3, "CUPI (app admin) user", self.v_cupiuser, width=24)
+        self._row(uf, 4, "CUPI password", self.v_cupipw, show="•", width=24)
+        ttk.Label(uf, text="OS admin empty = same as CUCM. CUPI is only for the Excel inventory.",
+                  style="Muted.TLabel").grid(row=5, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(f, text="Remember passwords (encrypted for this Windows user)",
+                        variable=self.v_savepw).pack(anchor="w", pady=(6, 0))
 
         btns = ttk.Frame(f)
         btns.pack(fill="x", pady=10)
-        ttk.Button(btns, text="Connect && discover nodes", style="Accent.TButton",
+        ttk.Button(btns, text="Connect & discover nodes", style="Accent.TButton",
                    command=lambda: self.task("Discover cluster", self._discover)).pack(side="left")
         ttk.Button(btns, text="Refresh versions",
                    command=lambda: self.task("Versions", self._versions)).pack(side="left", padx=6)
@@ -447,7 +501,7 @@ class App(tk.Tk):
                    command=lambda: os.startfile(REPORT_DIR)).pack(side="left")
 
         cols = ("host", "ip", "type", "role", "active", "inactive", "cops")
-        self.ctree = ttk.Treeview(f, columns=cols, show="headings", height=8)
+        self.ctree = ttk.Treeview(f, columns=cols, show="headings", height=7)
         for col, t, w in (("host", "Hostname", 150), ("ip", "IP", 120), ("type", "Type", 70),
                           ("role", "Role", 90), ("active", "Active version", 170),
                           ("inactive", "Inactive version", 170), ("cops", "Installed COP files", 300)):
@@ -455,8 +509,8 @@ class App(tk.Tk):
             self.ctree.column(col, width=w, stretch=(col == "cops"))
         self.ctree.pack(fill="both", expand=True)
         ttk.Label(f, style="Muted.TLabel", justify="left", text=(
-            "Nodes come from 'show network cluster' on the publisher (CUCM + IM&P). The same OS admin "
-            "credentials are used for every node.\nHealth check (pre/post upgrade) runs version, cluster, "
+            "Nodes come from 'show network cluster' on each publisher (CUCM + IM&P, Unity Connection). "
+            "Each cluster's OS admin is used for its own nodes.\nHealth check (pre/post upgrade) runs version, cluster, "
             "status, NTP, DB replication, services and core-dump checks on the nodes checked on the "
             "Upgrade / COP tab and saves a text report.")).pack(anchor="w", pady=(8, 0))
 
@@ -470,27 +524,44 @@ class App(tk.Tk):
             p.refresh()
         if self.nodes:
             pub = next((n for n in self.nodes if n.get("role") == "Publisher"), self.nodes[0])
+            n_cuc = sum(1 for n in self.nodes if cuc_ops.is_cuc(n))
+            extra = f" + {n_cuc} CUC" if n_cuc else ""
             self.conn_pill.configure(text=f"  ● {pub.get('hostname') or pub['host']}  |  "
-                                          f"{len(self.nodes)} node(s)  ", bg=GREEN)
+                                          f"{len(self.nodes) - n_cuc} node(s){extra}  ", bg=GREEN)
         self._console_nodes()
 
     def _discover(self):
-        pub = self.v_pub.get().strip()
-        if not pub:
-            raise CLIError("Enter the publisher address.")
-        with self.shell(pub) as sh:
-            nodes, raw = ops.discover_nodes(sh)
-            if not nodes:
-                self.log("Could not parse 'show network cluster' - using the publisher only:\n" + raw)
-                nodes = [{"host": pub, "hostname": pub, "role": "Publisher", "type": "CUCM"}]
-            v = ops.versions(sh)
-            for n in nodes:
-                if n["host"] == pub or n["fqdn"].lower() == pub.lower() or n["hostname"].lower() == pub.lower():
-                    n.update(active=v["active"], inactive=v["inactive"], cops=v["cops"])
+        pubs = {cl: v.get().strip() for cl, v in (("cucm", self.v_pub), ("cuc", self.v_cucpub)) if v.get().strip()}
+        if not pubs:
+            raise CLIError("Enter a CUCM and/or Unity Connection publisher address.")
+        nodes, errors = [], []
+        for cl, pub in pubs.items():
+            label = "Unity Connection" if cl == "cuc" else "CUCM"
+            try:
+                with self.shell(pub, cl) as sh:
+                    found, raw = ops.discover_nodes(sh)
+                    if not found:
+                        self.log(f"{label}: could not parse 'show network cluster' - using the publisher only:\n{raw}")
+                        found = [{"host": pub, "fqdn": pub, "hostname": pub, "role": "Publisher", "type": "CUCM"}]
+                    v = ops.versions(sh)
+                for n in found:
+                    n["cluster"] = cl
+                    if cl == "cuc":
+                        n["type"] = "Unity"
+                    if pub.lower() in (n["host"], n.get("fqdn", "").lower(), n.get("hostname", "").lower()):
+                        n.update(active=v["active"], inactive=v["inactive"], cops=v["cops"])
+                    if not any(m["host"] == n["host"] for m in nodes):
+                        nodes.append(n)
+                self.log(f"{label}: {len(found)} node(s): " +
+                         ", ".join(f"{n['hostname']} ({n['host']})" for n in found))
+            except CLIError as e:
+                errors.append(f"{label}: {e}")
+                nodes += [n for n in self.nodes if self.cluster_of(n["host"]) == cl]   # keep what we had
         self.nodes = nodes
-        self.log(f"Discovered {len(nodes)} node(s): " + ", ".join(f"{n['hostname']} ({n['host']})" for n in nodes))
         self.ui(self._nodes_changed)
         self.ui(self._save_cfg)
+        if errors:
+            raise CLIError("\n\n".join(errors))
 
     def _versions(self):
         if not self.nodes:
@@ -513,8 +584,9 @@ class App(tk.Tk):
 
         def one(n):
             with self.shell(n["host"]) as sh:
-                parts[n["host"]] = ops.health_check(sh, diagnose, on_output=self.cli_out(n["host"]),
-                                                    cancel=self.cancel)
+                parts[n["host"]] = ops.health_check(
+                    sh, diagnose, on_output=self.cli_out(n["host"]), cancel=self.cancel,
+                    commands=cuc_ops.HEALTH_COMMANDS if cuc_ops.is_cuc(n) else None)
         run_on_nodes(nodes, one, parallel=True, log=self.log)
         with open(path, "w", encoding="utf-8") as fh:
             for n in nodes:
@@ -531,7 +603,8 @@ class App(tk.Tk):
         nodes = self.up_picker.selected() or self.nodes
         ip, port, user, pw = self.sftp_params()
         ts = stamp()
-        pub = self.publisher()
+        pubs = self.publishers()
+        pub = pubs.get("cucm") or pubs.get("cuc", "")
         results, transcripts = {}, {}
 
         def one(n):
@@ -546,11 +619,13 @@ class App(tk.Tk):
                 since = time.time()
                 with sh:
                     results[host] = ops.dry_run_node(sh, ip, user, pw, port, "/" + rel,
-                                                     publisher=(host == pub),
+                                                     publisher=(host in pubs.values()),
+                                                     extra_commands=["show cuc cluster status"]
+                                                     if cuc_ops.is_cuc(n) else (),
                                                      on_output=self.cli_out(host), cancel=self.cancel)
                 hint = self.sftp_hint(host, since).strip()
                 if hint and any(not ok for name, ok, _ in results[host] if "SFTP" in name):
-                    results[host].append(("CUCM -> SFTP connection seen by this PC", False, hint))
+                    results[host].append(("Node -> SFTP connection seen by this PC", False, hint))
             except Exception as e:
                 results[host] = [("SSH login + CLI prompt", False, str(e))]
             bad = sum(1 for _, ok, _ in results[host] if not ok)
@@ -560,18 +635,29 @@ class App(tk.Tk):
         run_on_nodes(nodes, one, parallel=True, log=self.log)
 
         axl_line = "AXL: skipped (no AXL user entered)"
-        if self.v_axluser.get().strip() and self.v_axlpw.get():
+        if "cucm" not in pubs:
+            axl_line = "AXL: skipped (no CUCM cluster)"
+        elif self.v_axluser.get().strip() and self.v_axlpw.get():
             try:
                 axl = ops.AXLSQL(pub, self.v_axluser.get().strip(), self.v_axlpw.get())
                 rows = axl.query("SELECT COUNT(*) AS devices FROM device")
                 axl_line = f"AXL: OK (schema {axl.version}, {rows[0].get('devices', '?')} devices)"
             except Exception as e:
                 axl_line = f"AXL: FAILED - {e}"
+        if "cuc" in pubs:
+            cupi_line = "CUPI: skipped (no CUPI user entered)"
+            if self.v_cupiuser.get().strip() and self.v_cupipw.get():
+                try:
+                    api = self.cupi()
+                    cupi_line = f"CUPI: OK (Unity Connection {api.version()}, {api.count('/vmrest/users')} users)"
+                except Exception as e:
+                    cupi_line = f"CUPI: FAILED - {e}"
+            axl_line += "\n" + cupi_line
 
         path = os.path.join(REPORT_DIR, f"dryrun-{ts}.txt")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(f"{APP} - dry run {datetime.now():%Y-%m-%d %H:%M}\n"
-                     f"Publisher {pub} | SFTP {ip}:{port} user {user} | root {self.root()}\n{axl_line}\n\n")
+                     f"Publishers {', '.join(f'{k}={v}' for k, v in pubs.items())} | SFTP {ip}:{port} user {user} | root {self.root()}\n{axl_line}\n\n")
             for n in nodes:
                 fh.write(f"=== {n.get('hostname')} ({n['host']}) ===\n")
                 for name, ok, detail in results.get(n["host"], []):
@@ -726,18 +812,37 @@ class App(tk.Tk):
     # ======================================================================
     def _tab_backup(self, f):
         c = self.cfg
-        self.v_dev = tk.StringVar(value=c.get("drs_device", "MAINT_TOOL_SFTP"))
-        self.v_keep = tk.StringVar(value=c.get("drs_keep", "3"))
-        self.v_feat = tk.StringVar(value=c.get("drs_features", ops.DEFAULT_FEATURES))
-        self.v_bkdir = tk.StringVar(value=c.get("drs_dir", "/backup"))
+        # One set of DRS settings per cluster; each cluster backs up into its own folder,
+        # because DRS rotation ("backups to keep") deletes the oldest tar files in its folder.
+        self.bk_settings = {
+            "cucm": {"device": c.get("drs_device", "MAINT_TOOL_SFTP"), "keep": c.get("drs_keep", "3"),
+                     "features": c.get("drs_features", ops.DEFAULT_FEATURES), "dir": c.get("drs_dir", "/backup")},
+            "cuc": dict({"device": "MAINT_TOOL_SFTP", "keep": "3", "features": cuc_ops.DEFAULT_FEATURES,
+                         "dir": "/backup_cuc"}, **c.get("drs_cuc", {})),
+        }
+        self._bk_cur = "cucm"
+        b = self.bk_settings["cucm"]
+        self.v_bkcl = tk.StringVar(value="cucm")
+        self.v_dev = tk.StringVar(value=b["device"])
+        self.v_keep = tk.StringVar(value=b["keep"])
+        self.v_feat = tk.StringVar(value=b["features"])
+        self.v_bkdir = tk.StringVar(value=b["dir"])
 
-        lf = ttk.LabelFrame(f, text="DRS backup to the built-in SFTP server (runs on the publisher)", padding=10)
+        lf = ttk.LabelFrame(f, text="DRS backup to the built-in SFTP server (runs on the cluster's publisher)",
+                            padding=10)
         lf.pack(fill="x")
-        self._row(lf, 0, "Backup device name", self.v_dev, width=24)
-        self._row(lf, 1, "Directory on SFTP", self.v_bkdir, width=24, hint="/backup = <root>\\backup")
-        self._row(lf, 2, "Backups to keep", self.v_keep, width=6, hint="DRS deletes older backups beyond this")
-        self._row(lf, 3, "Features", self.v_feat, width=40,
-                  hint="UCM, CDR_CAR, PLM (older), CUP / IM&P are added by DRS on IM&P clusters")
+        ttk.Label(lf, text="Cluster").grid(row=0, column=0, sticky="w", pady=3)
+        rb = ttk.Frame(lf)
+        rb.grid(row=0, column=1, columnspan=2, sticky="w")
+        for val, text in (("cucm", "CUCM / IM&P"), ("cuc", "Unity Connection")):
+            ttk.Radiobutton(rb, text=text, value=val, variable=self.v_bkcl,
+                            command=self._bk_switch).pack(side="left", padx=(0, 14))
+        self._row(lf, 1, "Backup device name", self.v_dev, width=24)
+        self._row(lf, 2, "Directory on SFTP", self.v_bkdir, width=24,
+                  hint="/backup = <root>\\backup (use a separate folder per cluster)")
+        self._row(lf, 3, "Backups to keep", self.v_keep, width=6, hint="DRS deletes older backups beyond this")
+        self._row(lf, 4, "Features", self.v_feat, width=40,
+                  hint="CUCM: UCM,CDR_CAR (PLM on old releases)  |  Unity Connection: CUC")
 
         b = ttk.Frame(f)
         b.pack(fill="x", pady=10)
@@ -747,7 +852,8 @@ class App(tk.Tk):
                    command=lambda: self.task("DRS device", self._backup_device)).pack(side="left", padx=6)
         for text, fn in (("Status", lambda sh: ops.drs_status(sh)["raw"]),
                          ("History", ops.drs_history), ("Device list", ops.drs_device_list),
-                         ("Schedules", ops.drs_schedule_list)):
+                         ("Schedules", ops.drs_schedule_list),
+                         ("Registered features", self._drs_registration)):
             ttk.Button(b, text=text, command=lambda t=text, fn=fn: self.task(
                 f"DRS {t.lower()}", self._pub_cmd, fn, f"DRS {t}")).pack(side="left", padx=2)
         ttk.Button(b, text="Cancel running backup", style="Danger.TButton",
@@ -779,6 +885,27 @@ class App(tk.Tk):
         self.bl_tree.pack(fill="both", expand=True)
         self.after(500, self._list_backups)
 
+    def _bk_store(self):
+        self.bk_settings[self._bk_cur] = {"device": self.v_dev.get().strip(), "keep": self.v_keep.get().strip(),
+                                          "features": self.v_feat.get().strip(), "dir": self.v_bkdir.get().strip()}
+
+    def _bk_switch(self):
+        self._bk_store()
+        self._bk_cur = self.v_bkcl.get()
+        b = self.bk_settings[self._bk_cur]
+        self.v_dev.set(b["device"])
+        self.v_keep.set(b["keep"])
+        self.v_feat.set(b["features"])
+        self.v_bkdir.set(b["dir"])
+        self.bk_status.configure(text="")
+        self.bk_tree.delete(*self.bk_tree.get_children())
+        self._list_backups()
+
+    def _drs_registration(self, sh):
+        """'utils disaster_recovery show_registration <hostname>' - the feature names DRS knows."""
+        n = self.node(sh.host) or {}
+        return sh.run(f"utils disaster_recovery show_registration {n.get('hostname') or sh.host}", timeout=120)
+
     def _bk_local(self):
         rel = self.v_bkdir.get().strip().strip("/").replace("/", os.sep)
         return self.root(*([rel] if rel else []))
@@ -794,7 +921,7 @@ class App(tk.Tk):
                                                        datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")))
 
     def _pub_cmd(self, fn, title):
-        with self.shell(self.publisher()) as sh:
+        with self.shell(self.publisher(self._bk_cur)) as sh:
             out = fn(sh)
         self.log(f"{title}:\n{out}")
 
@@ -803,7 +930,7 @@ class App(tk.Tk):
         path = self.v_bkdir.get().strip() or "/backup"
         self._bk_local()
         own = sh is None
-        sh = sh or self.shell(self.publisher()).connect()
+        sh = sh or self.shell(self.publisher(self._bk_cur)).connect()
         try:
             since = time.time()
             try:
@@ -817,7 +944,7 @@ class App(tk.Tk):
                 sh.close()
 
     def _backup(self):
-        pub = self.publisher()
+        pub = self.publisher(self._bk_cur)
         with self.shell(pub) as sh:
             self._backup_device(sh)
             out = ops.drs_start_backup(sh, self.v_feat.get(), self.v_dev.get().strip())
@@ -840,7 +967,7 @@ class App(tk.Tk):
                 f"DRS backup finished: {st['status']}\nTar file: {st['tar']}")
 
     def _cancel_backup(self):
-        if messagebox.askyesno(APP, "Cancel the DRS backup running on the publisher?"):
+        if messagebox.askyesno(APP, f"Cancel the DRS backup running on the {'Unity Connection' if self._bk_cur == 'cuc' else 'CUCM'} publisher?"):
             threading.Thread(target=lambda: self._safe(self._pub_cmd, ops.drs_cancel, "Cancel backup"),
                              daemon=True).start()
 
@@ -1026,7 +1153,9 @@ class App(tk.Tk):
     # Data export tab
     # ======================================================================
     def _tab_export(self, f):
-        self.v_preset = tk.StringVar(value=list(ops.FILE_PRESETS)[0])
+        base = {k: v for k, v in ops.FILE_PRESETS.items() if k != "Custom"}
+        self.file_presets = dict(base, **cuc_ops.FILE_PRESETS, Custom=ops.FILE_PRESETS["Custom"])
+        self.v_preset = tk.StringVar(value=list(self.file_presets)[0])
         self.v_loc = tk.StringVar()
         self.v_spec = tk.StringVar()
         self.v_opt = tk.StringVar()
@@ -1034,7 +1163,7 @@ class App(tk.Tk):
         lf = ttk.LabelFrame(f, text="Files from the nodes ('file get' to the built-in SFTP server)", padding=10)
         lf.pack(fill="x")
         ttk.Label(lf, text="What").grid(row=0, column=0, sticky="w")
-        cb = ttk.Combobox(lf, textvariable=self.v_preset, values=list(ops.FILE_PRESETS), state="readonly", width=40)
+        cb = ttk.Combobox(lf, textvariable=self.v_preset, values=list(self.file_presets), state="readonly", width=44)
         cb.grid(row=0, column=1, columnspan=3, sticky="w", pady=3)
         cb.bind("<<ComboboxSelected>>", lambda e: self._preset())
         ttk.Label(lf, text="Location").grid(row=1, column=0, sticky="w")
@@ -1056,24 +1185,39 @@ class App(tk.Tk):
                    command=lambda: self.task("File export", self._file_export)).pack(side="left")
         ttk.Button(eb, text="Open export folder", command=lambda: os.startfile(self.root("export"))).pack(side="left", padx=6)
 
-        af = ttk.LabelFrame(f, text="Configuration inventory to Excel (AXL SQL, publisher)", padding=10)
+        af = ttk.LabelFrame(f, text="Configuration inventory to Excel (publisher)", padding=10)
         af.pack(fill="both", expand=True, pady=(10, 0))
+        self.v_invsrc = tk.StringVar(value="cucm")
+        src = ttk.Frame(af)
+        src.pack(fill="x", pady=(0, 6))
+        for val, text in (("cucm", "CUCM (AXL SQL)"), ("cuc", "Unity Connection (CUPI REST)")):
+            ttk.Radiobutton(src, text=text, value=val, variable=self.v_invsrc,
+                            command=self._inv_source).pack(side="left", padx=(0, 14))
         self.sql_list = tk.Listbox(af, selectmode="multiple", height=7, exportselection=False,
                                    font=("Segoe UI", 10), relief="solid", bd=1)
-        for name in ops.SQL_PRESETS:
-            self.sql_list.insert("end", name)
-        self.sql_list.select_set(0, "end")
         self.sql_list.pack(side="left", fill="y")
         rf = ttk.Frame(af)
         rf.pack(side="left", fill="both", expand=True, padx=(10, 0))
-        ttk.Label(rf, text="Custom SQL (optional, added as sheet 'Custom'):").pack(anchor="w")
+        self.custom_lbl = ttk.Label(rf, text="")
+        self.custom_lbl.pack(anchor="w")
         self.sql_custom = tk.Text(rf, height=5, font=("Consolas", 9), relief="solid", bd=1)
         self.sql_custom.pack(fill="both", expand=True)
         ttk.Button(rf, text="Export inventory to Excel…", style="Accent.TButton",
                    command=self._sql_export).pack(anchor="w", pady=(6, 0))
+        self._inv_source()
+
+    def _inv_source(self):
+        cuc = self.v_invsrc.get() == "cuc"
+        self.sql_list.delete(0, "end")
+        for name in (cuc_ops.CUPI_PRESETS if cuc else ops.SQL_PRESETS):
+            self.sql_list.insert("end", name)
+        self.sql_list.select_set(0, "end")
+        self.custom_lbl.configure(text="Custom CUPI path (optional, e.g. /vmrest/users?query=(alias%20startswith%20a)):"
+                                  if cuc else "Custom SQL (optional, added as sheet 'Custom'):")
+        self.sql_custom.delete("1.0", "end")
 
     def _preset(self):
-        loc, spec, opt = ops.FILE_PRESETS[self.v_preset.get()]
+        loc, spec, opt = self.file_presets[self.v_preset.get()]
         self.v_loc.set(loc)
         self.v_spec.set(spec)
         self.v_opt.set(opt)
@@ -1109,6 +1253,8 @@ class App(tk.Tk):
             os.startfile(self.root("export"))
 
     def _sql_export(self):
+        if self.v_invsrc.get() == "cuc":
+            return self._cupi_export()
         items = [(self.sql_list.get(i), ops.SQL_PRESETS[self.sql_list.get(i)]) for i in self.sql_list.curselection()]
         custom = self.sql_custom.get("1.0", "end").strip()
         if custom:
@@ -1132,6 +1278,38 @@ class App(tk.Tk):
             os.startfile(path)
         self.task("Inventory export", run)
 
+    def cupi(self):
+        user, pw = self.v_cupiuser.get().strip(), self.v_cupipw.get()
+        if not user or not pw:
+            raise CLIError("Enter the Unity Connection CUPI (application administrator) user and password "
+                           "on the Cluster tab.")
+        return cuc_ops.CUPI(self.publisher("cuc"), user, pw)
+
+    def _cupi_export(self):
+        items = [(self.sql_list.get(i), self.sql_list.get(i)) for i in self.sql_list.curselection()]
+        custom = self.sql_custom.get("1.0", "end").strip()
+        if custom:
+            items.append(("Custom", custom))
+        if not items:
+            messagebox.showwarning(APP, "Select at least one inventory item.")
+            return
+        if not self.v_cupiuser.get().strip() or not self.v_cupipw.get():
+            messagebox.showwarning(APP, "Enter the Unity Connection CUPI user and password on the Cluster tab.")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialdir=self.root("export"),
+                                            initialfile=f"CUC-inventory-{stamp()}.xlsx",
+                                            filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+
+        def run():
+            api = self.cupi()
+            ops.export_to_excel(items, lambda arg: cuc_ops.fetch_preset(api, arg), path,
+                                log=self.log, cancel=self.cancel)
+            self.log(f"Unity Connection inventory saved: {path} (CUC {api.version()})")
+            os.startfile(path)
+        self.task("Unity Connection inventory export", run)
+
     # ======================================================================
     # CLI console tab (interactive)
     # ======================================================================
@@ -1150,10 +1328,16 @@ class App(tk.Tk):
 
         quick = ttk.Frame(f)
         quick.pack(fill="x", pady=6)
-        for cmd in ("show version active", "show network cluster", "show status", "utils service list",
-                    "utils dbreplication runtimestate", "utils ntp status", "utils system upgrade status",
-                    "utils disaster_recovery status backup"):
-            ttk.Button(quick, text=cmd, command=lambda c=cmd: self._console_send(c)).pack(side="left", padx=2)
+        ttk.Label(quick, text="Quick command").pack(side="left")
+        cmds = ["show version active", "show network cluster", "show status", "utils service list",
+                "utils dbreplication runtimestate", "utils ntp status", "utils system upgrade status",
+                "utils disaster_recovery status backup"] + cuc_ops.CONSOLE_COMMANDS
+        self.v_quick = tk.StringVar(value=cmds[0])
+        ttk.Combobox(quick, textvariable=self.v_quick, values=cmds, state="readonly",
+                     width=40).pack(side="left", padx=6)
+        ttk.Button(quick, text="Run", command=lambda: self._console_send(self.v_quick.get())).pack(side="left")
+        ttk.Label(quick, text="('show cuc …' commands are for Unity Connection nodes)",
+                  style="Muted.TLabel").pack(side="left", padx=10)
 
         self.term = scrolledtext.ScrolledText(f, bg="#0B1220", fg="#E5E7EB", insertbackground="white",
                                               font=("Consolas", 10), state="disabled", relief="flat")
@@ -1171,7 +1355,7 @@ class App(tk.Tk):
                   "(type the answer and press Enter).").pack(anchor="w")
 
     def _console_nodes(self):
-        vals = [f"{n['host']}  ({n.get('hostname', '')} {n.get('role', '')})" for n in self.nodes]
+        vals = [f"{n['host']}  ({n.get('hostname', '')} {n.get('type', '')} {n.get('role', '')})" for n in self.nodes]
         self.cnode_cb.configure(values=vals)
         if vals and not self.v_cnode.get():
             self.v_cnode.set(vals[0])
@@ -1244,4 +1428,9 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
+    try:    # own taskbar identity, so Windows shows app.ico instead of the Python icon
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CollabOpsManager")
+    except Exception:
+        pass
     App().mainloop()

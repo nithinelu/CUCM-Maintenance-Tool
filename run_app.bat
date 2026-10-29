@@ -1,5 +1,5 @@
 @echo off
-rem Launch CUCM Maintenance Tool (no console window).
+rem Launch Collab Ops Manager (no console window).
 rem Uses the REAL Python directly, because the bare "pythonw" on PATH is the
 rem Microsoft Store stub ("Python was not found") which shadows the real one.
 cd /d "%~dp0"

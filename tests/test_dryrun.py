@@ -41,8 +41,8 @@ app.mainloop()
 rep = sorted(f for f in os.listdir(maint_app.REPORT_DIR) if f.startswith("dryrun"))[-1]
 text = open(os.path.join(maint_app.REPORT_DIR, rep), encoding="utf-8").read()
 print(text[:2500])
-assert "[OK ] CUCM -> SFTP: upgrade wizard file list" in text and "ciscocm.demo.cop.sha512" in text
+assert "[OK ] Node -> SFTP: upgrade wizard file list" in text and "ciscocm.demo.cop.sha512" in text
 assert app.v_spw.get() not in text and "adminpw" not in text, "password leaked into report"
-assert "[OK ] CUCM -> SFTP: file get" in text and "Start installation" not in text
+assert "[OK ] Node -> SFTP: file get" in text and "Start installation" not in text
 os.remove(os.path.join(maint_app.REPORT_DIR, rep))
 app.stop_sftp(); app.destroy(); print("DRYRUN OK")

@@ -65,8 +65,8 @@ HEALTH_COMMANDS = [
 ]
 
 
-def health_check(sh, include_diagnose=False, on_output=None, cancel=None):
-    cmds = list(HEALTH_COMMANDS) + (["utils diagnose test"] if include_diagnose else [])
+def health_check(sh, include_diagnose=False, on_output=None, cancel=None, commands=None):
+    cmds = list(commands or HEALTH_COMMANDS) + (["utils diagnose test"] if include_diagnose else [])
     parts = []
     for cmd in cmds:
         if cancel is not None and cancel.is_set():
@@ -346,7 +346,7 @@ def file_get(sh, location, spec, options, sftp_ip, sftp_user, sftp_password, rem
 # Dry run: read-only checks of everything the tool needs, nothing is changed on CUCM
 # --------------------------------------------------------------------------
 def dry_run_node(sh, sftp_ip, sftp_user, sftp_password, sftp_port, export_dir, publisher,
-                 on_output=None, cancel=None):
+                 on_output=None, cancel=None, extra_commands=()):
     """Returns [(check, ok, detail)]. Only show/status commands, the upgrade wizard up to
     its file list (answered 'q'), and one small 'file get' to this PC."""
     results = []
@@ -356,6 +356,8 @@ def dry_run_node(sh, sftp_ip, sftp_user, sftp_password, sftp_port, export_dir, p
             return
         try:
             detail = sh.redact(str(fn()))
+            if re.search(r"Executed command unsuccessfully|No valid command entered", detail):
+                raise CLIError(detail)
             results.append((name, True, detail))
         except Exception as e:
             results.append((name, False, sh.redact(str(e)).strip()[:1500]))
@@ -372,15 +374,17 @@ def dry_run_node(sh, sftp_ip, sftp_user, sftp_password, sftp_port, export_dir, p
                                                 for n in discover_nodes(sh)[0]) or "none parsed")
         check("DRS device list (read)", lambda: drs_device_list(sh))
         check("DRS backup status (read)", lambda: drs_status(sh)["raw"])
+    for cmd in extra_commands:
+        check(cmd, lambda c=cmd: sh.run(c, timeout=300))
 
     def _walk():
         ok, files = upgrade_initiate(sh, sftp_ip, sftp_user, sftp_password, "/upgrade", None,
                                      sftp_port=sftp_port, on_output=on_output, cancel=cancel,
                                      list_only=True)
-        return "CUCM logged in to the SFTP server; offered: " + (", ".join(files) or
+        return "The node logged in to the SFTP server; offered: " + (", ".join(files) or
                                                                   "(no valid files in /upgrade)")
-    check("CUCM -> SFTP: upgrade wizard file list (answered 'q')", _walk)
-    check("CUCM -> SFTP: file get install system-history.log",
+    check("Node -> SFTP: upgrade wizard file list (answered 'q')", _walk)
+    check("Node -> SFTP: file get install system-history.log",
           lambda: file_get(sh, "install", "system-history.log", "", sftp_ip, sftp_user, sftp_password,
                            export_dir, sftp_port=sftp_port, on_output=on_output, cancel=cancel)[-400:])
     return results
@@ -519,6 +523,12 @@ class AXLSQL:
 
 def export_sql_to_excel(axl, names_sql, path, log=None, cancel=None):
     """names_sql: list of (sheet_name, sql). Writes one sheet per query."""
+    return export_to_excel(names_sql, axl.query, path, log=log, cancel=cancel)
+
+
+def export_to_excel(items, fetch, path, log=None, cancel=None):
+    """items: list of (sheet_name, arg); fetch(arg) -> list of row dicts. One sheet each,
+    plus a Summary sheet. Columns are the union of the row keys, in first-seen order."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
@@ -528,18 +538,18 @@ def export_sql_to_excel(axl, names_sql, path, log=None, cancel=None):
     summary.title = "Summary"
     summary.append(["Sheet", "Rows", "Exported"])
     hdr_fill = PatternFill("solid", fgColor="1F3864")
-    for name, sql in names_sql:
+    for name, arg in items:
         if cancel is not None and cancel.is_set():
             break
         try:
-            rows = axl.query(sql)
+            rows = fetch(arg)
         except CLIError as e:
             if log:
                 log(f"{name}: {e}")
             summary.append([name, f"ERROR: {e}", ""])
             continue
         ws = wb.create_sheet(re.sub(r"[\[\]:*?/\\]", "-", name)[:31])
-        cols = list(rows[0].keys()) if rows else ["(no rows)"]
+        cols = list(dict.fromkeys(k for r in rows for k in r)) or ["(no rows)"]
         ws.append(cols)
         for r in rows:
             ws.append([r.get(c, "") for c in cols])
